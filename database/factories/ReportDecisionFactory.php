@@ -7,7 +7,7 @@ use App\Models\ReportDecision;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ReportDecision>
+ * @extends Factory<ReportDecision>
  */
 class ReportDecisionFactory extends Factory
 {

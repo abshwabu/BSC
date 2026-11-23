@@ -5,6 +5,7 @@ namespace App\Services\Export;
 use App\Models\Report;
 use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\Element\Table;
+use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\SimpleType\Jc;
 use PhpOffice\PhpWord\SimpleType\TblWidth;
@@ -20,7 +21,7 @@ class ReportDocxExporter
     {
         $data = ReportDataPreparer::prepare($report, $lang, $showSampleNote);
 
-        $phpWord = new PhpWord();
+        $phpWord = new PhpWord;
         $phpWord->setDefaultFontName(self::FONT_FAMILY);
         $phpWord->setDefaultFontSize(10);
 
@@ -329,7 +330,7 @@ class ReportDocxExporter
 
         // Save Word document to temporary file
         $tempPath = tempnam(sys_get_temp_dir(), 'bsc_docx_').'.docx';
-        $writer = \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'Word2007');
+        $writer = IOFactory::createWriter($phpWord, 'Word2007');
         $writer->save($tempPath);
 
         return $tempPath;

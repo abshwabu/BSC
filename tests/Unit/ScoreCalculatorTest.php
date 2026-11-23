@@ -1,8 +1,9 @@
 <?php
 
-uses(Tests\TestCase::class);
-
 use App\Services\Bsc\ScoreCalculator;
+use Tests\TestCase;
+
+uses(TestCase::class);
 
 test('calculates achievement percentage for higher_better', function () {
     // Normal calculation

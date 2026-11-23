@@ -349,6 +349,128 @@ async function saveNow() {
         errorMessage.value = err.response?.data?.message || t('member_step.autosave_status.error');
     }
 }
+
+// Template Integration
+const showTemplateModal = ref(false);
+const availableTemplates = ref([]);
+const isLoadingTemplates = ref(false);
+const templateRoleFilter = ref('member'); // 'member' | 'all'
+const selectedTemplateIds = ref([]);
+const templateSearch = ref('');
+
+async function openTemplateModal() {
+    showTemplateModal.value = true;
+    selectedTemplateIds.value = [];
+    if (availableTemplates.value.length === 0) {
+        isLoadingTemplates.value = true;
+        try {
+            const res = await axios.get('/activity-templates');
+            availableTemplates.value = res.data || [];
+        } catch (e) {
+            console.error('Failed to load activity templates', e);
+        } finally {
+            isLoadingTemplates.value = false;
+        }
+    }
+}
+
+const filteredTemplates = computed(() => {
+    const memberPos = props.reportMember.member?.position_key || 'sales';
+    return availableTemplates.value.filter((tpl) => {
+        const matchesRole = templateRoleFilter.value === 'all' || tpl.position_key === memberPos;
+        const q = templateSearch.value.toLowerCase().trim();
+        const matchesSearch = !q ||
+            tpl.title.toLowerCase().includes(q) ||
+            tpl.activity_text.toLowerCase().includes(q) ||
+            tpl.kpi_text.toLowerCase().includes(q);
+        return matchesRole && matchesSearch;
+    });
+});
+
+function insertSingleTemplate(tpl) {
+    const newSort = activities.value.length + 1;
+    activities.value.push({
+        id: null,
+        temp_id: `tmp_${Date.now()}_${Math.random()}`,
+        sort_order: newSort,
+        activity_text: tpl.activity_text || tpl.title || '',
+        kpi_text: tpl.kpi_text || '',
+        target_value: tpl.default_target_value !== null ? tpl.default_target_value : '',
+        target_label: tpl.default_target_label || '',
+        actual_value: '',
+        actual_label: tpl.default_target_label || '',
+        direction: tpl.direction || 'higher_better',
+        perspective: tpl.perspective || 'customers',
+    });
+    triggerAutosave();
+    window.dispatchEvent(new CustomEvent('bsc-toast', {
+        detail: {
+            type: 'success',
+            message: 'ተግባሩ ከቴምፕሌት ገብቷል! (Activity inserted from template)',
+        },
+    }));
+}
+
+function insertSelectedTemplates() {
+    const toInsert = availableTemplates.value.filter((tpl) => selectedTemplateIds.value.includes(tpl.id));
+    toInsert.forEach((tpl) => {
+        const newSort = activities.value.length + 1;
+        activities.value.push({
+            id: null,
+            temp_id: `tmp_${Date.now()}_${Math.random()}`,
+            sort_order: newSort,
+            activity_text: tpl.activity_text || tpl.title || '',
+            kpi_text: tpl.kpi_text || '',
+            target_value: tpl.default_target_value !== null ? tpl.default_target_value : '',
+            target_label: tpl.default_target_label || '',
+            actual_value: '',
+            actual_label: tpl.default_target_label || '',
+            direction: tpl.direction || 'higher_better',
+            perspective: tpl.perspective || 'customers',
+        });
+    });
+    triggerAutosave();
+    showTemplateModal.value = false;
+    window.dispatchEvent(new CustomEvent('bsc-toast', {
+        detail: {
+            type: 'success',
+            message: `${toInsert.length} ተግባራት ከቴምፕሌት ገብተዋል!`,
+        },
+    }));
+}
+
+async function saveRowAsTemplate(row) {
+    if (!row.activity_text && !row.kpi_text) {
+        alert('እባክዎ የተግባር ወይም የ KPI መግለጫ ያስገቡ።');
+        return;
+    }
+
+    try {
+        await axios.post('/templates', {
+            position_key: props.reportMember.member?.position_key || 'custom',
+            title: row.activity_text.slice(0, 50) || 'አዲስ ቴምፕሌት',
+            activity_text: row.activity_text,
+            kpi_text: row.kpi_text,
+            default_target_value: row.target_value !== '' ? row.target_value : null,
+            default_target_label: row.target_label || '',
+            direction: row.direction || 'higher_better',
+            perspective: row.perspective || 'customers',
+        });
+        window.dispatchEvent(new CustomEvent('bsc-toast', {
+            detail: {
+                type: 'success',
+                message: 'ተግባሩ በቴምፕሌት ላይብረሪ ውስጥ ተቀምጧል! (Saved to template library)',
+            },
+        }));
+    } catch (e) {
+        window.dispatchEvent(new CustomEvent('bsc-toast', {
+            detail: {
+                type: 'error',
+                message: 'ቴምፕሌቱን ማስቀመጥ አልተቻለም።',
+            },
+        }));
+    }
+}
 </script>
 
 <template>
@@ -569,6 +691,14 @@ async function saveNow() {
                 <div class="flex items-center gap-2">
                     <button
                         type="button"
+                        @click="openTemplateModal"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-colors shadow-xs"
+                    >
+                        <span>📋</span>
+                        <span>{{ $t('templates_page.insert_from_template') }}</span>
+                    </button>
+                    <button
+                        type="button"
                         @click="addRow"
                         class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors"
                     >
@@ -741,6 +871,12 @@ async function saveNow() {
                             <!-- Row Actions -->
                             <td class="py-2 px-2 text-center whitespace-nowrap">
                                 <div class="flex items-center justify-center gap-1">
+                                    <button
+                                        type="button"
+                                        @click="saveRowAsTemplate(row)"
+                                        class="p-1 text-gray-400 hover:text-amber-600 rounded transition-colors"
+                                        :title="$t('templates_page.save_as_template')"
+                                    >💾</button>
                                     <button
                                         type="button"
                                         @click="duplicateRow(idx)"
@@ -916,5 +1052,134 @@ async function saveNow() {
             </div>
         </div>
 
+        <!-- Insert from Template Modal -->
+        <div v-if="showTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-gray-200 dark:border-gray-700 max-h-[85vh] flex flex-col">
+                <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3 shrink-0">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">📋</span>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900 dark:text-white">
+                                {{ $t('templates_page.insert_from_template') }}
+                            </h3>
+                            <p class="text-xs text-gray-400">
+                                ተግባራትን በቀጥታ ወደ ሰንጠረዡ ለማስገባት ይምረጡ
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" @click="showTemplateModal = false" class="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+
+                <!-- Filters & Search -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                    <div class="inline-flex p-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-bold w-full sm:w-auto">
+                        <button
+                            type="button"
+                            @click="templateRoleFilter = 'member'"
+                            class="px-3 py-1 rounded-md transition-all"
+                            :class="templateRoleFilter === 'member'
+                                ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                : 'text-gray-600 dark:text-gray-300'"
+                        >
+                            የዚህ ዘርፍ ብቻ (Role-Specific)
+                        </button>
+                        <button
+                            type="button"
+                            @click="templateRoleFilter = 'all'"
+                            class="px-3 py-1 rounded-md transition-all"
+                            :class="templateRoleFilter === 'all'
+                                ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                : 'text-gray-600 dark:text-gray-300'"
+                        >
+                            {{ $t('templates_page.all_roles') }}
+                        </button>
+                    </div>
+
+                    <input
+                        type="text"
+                        v-model="templateSearch"
+                        :placeholder="$t('templates_page.search_placeholder')"
+                        class="w-full sm:w-64 text-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white py-1.5"
+                    />
+                </div>
+
+                <!-- Template list -->
+                <div class="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px]">
+                    <div v-if="isLoadingTemplates" class="py-12 text-center text-xs text-gray-400 animate-pulse">
+                        ቴምፕሌቶችን በመጫን ላይ...
+                    </div>
+
+                    <div
+                        v-else-if="filteredTemplates.length > 0"
+                        v-for="tpl in filteredTemplates"
+                        :key="tpl.id"
+                        class="p-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 bg-gray-50/50 dark:bg-gray-750 transition-all flex items-start justify-between gap-3"
+                    >
+                        <div class="flex items-start gap-2.5">
+                            <input
+                                type="checkbox"
+                                :value="tpl.id"
+                                v-model="selectedTemplateIds"
+                                class="mt-1 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-900 dark:text-white">
+                                        {{ tpl.title }}
+                                    </span>
+                                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                        {{ $t(`perspectives.${tpl.perspective}`) }}
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-600 dark:text-gray-300">
+                                    {{ tpl.activity_text }}
+                                </p>
+                                <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
+                                    <span>KPI: <strong class="text-gray-700 dark:text-gray-200">{{ tpl.kpi_text }}</strong></span>
+                                    <span>ዒላማ: <strong>{{ tpl.default_target_value ?? '' }} {{ tpl.default_target_label ?? '' }}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            @click="insertSingleTemplate(tpl)"
+                            class="shrink-0 px-2.5 py-1 text-xs font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors"
+                        >
+                            {{ $t('templates_page.insert_btn') }}
+                        </button>
+                    </div>
+
+                    <div v-else class="py-12 text-center text-xs text-gray-400">
+                        {{ $t('templates_page.no_templates') }}
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0">
+                    <span class="text-xs text-gray-500">
+                        {{ selectedTemplateIds.length }} ቴምፕሌት ተመርጧል
+                    </span>
+
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            @click="showTemplateModal = false"
+                            class="px-3 py-1.5 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                        >
+                            {{ $t('new_report_modal.cancel') }}
+                        </button>
+                        <button
+                            type="button"
+                            @click="insertSelectedTemplates"
+                            :disabled="selectedTemplateIds.length === 0"
+                            class="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm disabled:opacity-40"
+                        >
+                            {{ $t('templates_page.insert_selected') }} ({{ selectedTemplateIds.length }})
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>

@@ -20,6 +20,7 @@ const props = defineProps({
 const { t, locale } = useI18n();
 
 const showCreateModal = ref(false);
+const showImportModal = ref(false);
 
 const form = useForm({
     title: '',
@@ -28,6 +29,24 @@ const form = useForm({
     report_date: new Date().toISOString().split('T')[0],
     company_name: 'EthioTech Solutions',
 });
+
+const importForm = useForm({
+    json_file: null,
+});
+
+function handleFileSelect(event) {
+    importForm.json_file = event.target.files[0] || null;
+}
+
+function submitImport() {
+    importForm.post(route('reports.import-json'), {
+        forceFormData: true,
+        onSuccess: () => {
+            showImportModal.value = false;
+            importForm.reset();
+        },
+    });
+}
 
 function openCreateModal() {
     form.reset();
@@ -78,8 +97,12 @@ function deleteReport(reportId) {
                         {{ $t('reports.subtitle') }}
                     </p>
                 </div>
-                <div>
-                    <PrimaryButton @click="openCreateModal" class="gap-2 shadow-sm py-2.5 px-4 text-sm font-semibold">
+                <div class="flex items-center gap-2">
+                    <SecondaryButton @click="showImportModal = true" class="gap-1.5 py-2.5 px-3 text-xs font-semibold">
+                        <span>📥</span>
+                        <span>{{ $t('json_sync.import_json') }}</span>
+                    </SecondaryButton>
+                    <PrimaryButton @click="openCreateModal" class="gap-2 shadow-sm py-2.5 px-4 text-xs font-semibold">
                         <span class="text-base leading-none">➕</span>
                         <span>{{ $t('reports.new_report') }}</span>
                     </PrimaryButton>
@@ -185,6 +208,15 @@ function deleteReport(reportId) {
                                                 <span>✏️</span>
                                                 <span>{{ $t('reports.open') }}</span>
                                             </Link>
+
+                                            <a
+                                                :href="route('reports.export-json', report.id)"
+                                                class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-md bg-gray-50 hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 transition-colors"
+                                                :title="$t('json_sync.export_json')"
+                                            >
+                                                <span>💾</span>
+                                                <span class="hidden xl:inline">JSON</span>
+                                            </a>
 
                                             <button
                                                 type="button"
@@ -317,6 +349,47 @@ function deleteReport(reportId) {
                         </SecondaryButton>
                         <PrimaryButton :disabled="form.processing">
                             {{ form.processing ? $t('new_report_modal.creating') : $t('new_report_modal.create') }}
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+
+        <!-- Import JSON Modal -->
+        <Modal :show="showImportModal" @close="showImportModal = false" max-width="md">
+            <div class="p-6">
+                <div class="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 pb-3">
+                    <span class="text-2xl">📥</span>
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white">
+                            {{ $t('json_sync.modal_title') }}
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            {{ $t('json_sync.modal_desc') }}
+                        </p>
+                    </div>
+                </div>
+
+                <form @submit.prevent="submitImport" class="mt-4 space-y-4">
+                    <div>
+                        <InputLabel for="json_file" :value="$t('json_sync.file_label')" />
+                        <input
+                            id="json_file"
+                            type="file"
+                            accept=".json,application/json"
+                            @change="handleFileSelect"
+                            class="mt-1 block w-full text-xs text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 p-2"
+                            required
+                        />
+                        <InputError :message="importForm.errors.json_file" class="mt-1" />
+                    </div>
+
+                    <div class="mt-6 flex justify-end gap-3">
+                        <SecondaryButton @click="showImportModal = false" :disabled="importForm.processing">
+                            {{ $t('json_sync.cancel') }}
+                        </SecondaryButton>
+                        <PrimaryButton :disabled="importForm.processing || !importForm.json_file">
+                            {{ importForm.processing ? 'በማስመጣት ላይ...' : $t('json_sync.submit_import') }}
                         </PrimaryButton>
                     </div>
                 </form>

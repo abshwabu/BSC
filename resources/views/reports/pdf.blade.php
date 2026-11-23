@@ -292,6 +292,17 @@
 
         <!-- Title & Intro Header -->
         <div class="header-title-box">
+            @php
+                $companyLogo = null;
+                try {
+                    $companyLogo = \App\Models\Setting::get('company_logo');
+                } catch (\Throwable $e) {}
+            @endphp
+            @if($companyLogo)
+            <div style="text-align: center; margin-bottom: 8px;">
+                <img src="{{ $companyLogo }}" alt="Company Logo" style="max-height: 48px; max-width: 180px; object-fit: contain;">
+            </div>
+            @endif
             <h1 class="main-title">
                 {{ $lang === 'en' ? 'Strategic Plan Individual Performance Report & Balanced Scorecard' : 'የስትራቴጂክ እቅድ የግለሰብ አፈጻጸም ሪፖርት እና BSC ውጤት ካርድ' }}
             </h1>

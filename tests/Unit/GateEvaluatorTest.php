@@ -1,8 +1,9 @@
 <?php
 
 use App\Services\Bsc\GateEvaluator;
+use Tests\TestCase;
 
-uses(Tests\TestCase::class);
+uses(TestCase::class);
 
 test('gate evaluation returns disabled status when plc gate is not enabled', function () {
     $eval = GateEvaluator::evaluate(

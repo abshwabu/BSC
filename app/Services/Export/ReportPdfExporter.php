@@ -5,7 +5,6 @@ namespace App\Services\Export;
 use App\Models\Report;
 use Illuminate\Http\Response;
 use Spatie\LaravelPdf\Facades\Pdf;
-use Spatie\LaravelPdf\PdfBuilder;
 
 class ReportPdfExporter
 {

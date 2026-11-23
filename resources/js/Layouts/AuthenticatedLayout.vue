@@ -6,6 +6,7 @@ import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import LanguageToggle from '@/Components/LanguageToggle.vue';
+import Toast from '@/Components/Toast.vue';
 import { Link } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
@@ -38,6 +39,24 @@ const showingNavigationDropdown = ref(false);
                                     :active="route().current('reports.*')"
                                 >
                                     {{ $t('nav.reports') }}
+                                </NavLink>
+                                <NavLink
+                                    :href="route('trends.index')"
+                                    :active="route().current('trends.*')"
+                                >
+                                    {{ $t('nav.trends') }}
+                                </NavLink>
+                                <NavLink
+                                    :href="route('templates.index')"
+                                    :active="route().current('templates.*')"
+                                >
+                                    {{ $t('nav.templates') }}
+                                </NavLink>
+                                <NavLink
+                                    :href="route('settings.index')"
+                                    :active="route().current('settings.*')"
+                                >
+                                    {{ $t('nav.settings') }}
                                 </NavLink>
                             </div>
                         </div>
@@ -148,6 +167,24 @@ const showingNavigationDropdown = ref(false);
                         >
                             {{ $t('nav.reports') }}
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('trends.index')"
+                            :active="route().current('trends.*')"
+                        >
+                            {{ $t('nav.trends') }}
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('templates.index')"
+                            :active="route().current('templates.*')"
+                        >
+                            {{ $t('nav.templates') }}
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('settings.index')"
+                            :active="route().current('settings.*')"
+                        >
+                            {{ $t('nav.settings') }}
+                        </ResponsiveNavLink>
                     </div>
 
                     <!-- Responsive Settings Options -->
@@ -199,5 +236,6 @@ const showingNavigationDropdown = ref(false);
                 <slot />
             </main>
         </div>
+        <Toast />
     </div>
 </template>

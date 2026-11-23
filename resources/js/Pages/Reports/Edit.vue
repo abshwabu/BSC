@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import MemberStep from './Partials/MemberStep.vue';
 import DecisionStep from './Partials/DecisionStep.vue';
@@ -91,6 +91,32 @@ function onMemberSaved(updatedMember) {
 function onDecisionSaved(updatedDecision) {
     props.report.decision = updatedDecision;
 }
+
+// Unsaved-changes guard
+function handleBeforeUnload(e) {
+    if (globalSaveStatus.value === 'unsaved' || globalSaveStatus.value === 'saving') {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+}
+
+let removeInertiaListener = null;
+
+onMounted(() => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    removeInertiaListener = router.on('before', (event) => {
+        if ((globalSaveStatus.value === 'unsaved' || globalSaveStatus.value === 'saving') && !confirm(t('ui.unsaved_warning'))) {
+            event.preventDefault();
+        }
+    });
+});
+
+onUnmounted(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    if (removeInertiaListener) {
+        removeInertiaListener();
+    }
+});
 </script>
 
 <template>

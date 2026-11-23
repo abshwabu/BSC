@@ -2,6 +2,8 @@
 
 namespace App\Services\Bsc;
 
+use App\Models\Setting;
+
 class ScoreCalculator
 {
     public const DEFAULT_CAP = 120.0;
@@ -32,6 +34,13 @@ class ScoreCalculator
     public static function getDefaultCap(): float
     {
         try {
+            if (class_exists(Setting::class)) {
+                $settingCap = Setting::get('cap_percentage');
+                if ($settingCap !== null && is_numeric($settingCap)) {
+                    return (float) $settingCap;
+                }
+            }
+
             if (function_exists('app') && app()->has('config')) {
                 return (float) config('bsc.cap_percentage', self::DEFAULT_CAP);
             }
