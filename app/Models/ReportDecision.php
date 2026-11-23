@@ -20,8 +20,11 @@ class ReportDecision extends Model
         'plc_gate_enabled',
         'min_paying_customers',
         'min_mrr',
+        'actual_paying_customers',
+        'actual_mrr',
         'decision_text_am',
         'expansion_text_am',
+        'decisions_list',
     ];
 
     /**
@@ -35,6 +38,9 @@ class ReportDecision extends Model
             'plc_gate_enabled' => 'boolean',
             'min_paying_customers' => 'integer',
             'min_mrr' => 'decimal:2',
+            'actual_paying_customers' => 'integer',
+            'actual_mrr' => 'decimal:2',
+            'decisions_list' => 'array',
         ];
     }
 

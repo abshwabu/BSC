@@ -218,3 +218,20 @@ test('calculates consolidated company average across multiple members', function
         ->and($company['company_weighted_score_rounded'])->toBe(4.5)
         ->and($company['rating']['key'])->toBe('outstanding');
 });
+
+test('calculates consolidated company average for sample fixture with scores 4.91, 4.92, 4.98 producing 4.94', function () {
+    $m1 = ['weighted_score' => 4.91, 'weighted_percentage' => 101.4];
+    $m2 = ['weighted_score' => 4.92, 'weighted_percentage' => 102.1];
+    $m3 = ['weighted_score' => 4.98, 'weighted_percentage' => 104.5];
+
+    $company = ScoreCalculator::calculateCompanySummary([$m1, $m2, $m3]);
+
+    expect($company['member_count'])->toBe(3)
+        // (4.91 + 4.92 + 4.98) / 3 = 4.93666... -> rounds to 4.94
+        ->and($company['company_weighted_score_rounded'])->toBe(4.94)
+        // (101.4 + 102.1 + 104.5) / 3 = 102.666... -> rounds to 102.7
+        ->and($company['company_weighted_percentage_rounded'])->toBe(102.7)
+        ->and($company['rating']['key'])->toBe('outstanding')
+        ->and($company['rating']['label_am'])->toBe('እጅግ የላቀ')
+        ->and($company['rating']['label_en'])->toBe('Outstanding');
+});

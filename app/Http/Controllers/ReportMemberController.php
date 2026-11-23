@@ -26,6 +26,7 @@ class ReportMemberController extends Controller
             'challenges' => 'nullable|string',
             'next_steps' => 'nullable|string',
             'signed' => 'nullable|boolean',
+            'readiness_note' => 'nullable|string',
             'weights' => 'nullable|array',
             'activities' => 'nullable|array',
             'activities.*.id' => 'nullable|integer',
@@ -53,49 +54,54 @@ class ReportMemberController extends Controller
         }
 
         DB::transaction(function () use ($reportMember, $validated) {
-            $reportMember->update([
-                'achievements' => $validated['achievements'] ?? $reportMember->achievements,
-                'challenges' => $validated['challenges'] ?? $reportMember->challenges,
-                'next_steps' => $validated['next_steps'] ?? $reportMember->next_steps,
-                'signed' => $validated['signed'] ?? $reportMember->signed,
-                'weights' => $validated['weights'] ?? $reportMember->weights,
-            ]);
-
-            $incomingActivities = $validated['activities'] ?? [];
-            $existingActivityIds = $reportMember->activities()->pluck('id')->toArray();
-            $keptActivityIds = [];
-
-            foreach ($incomingActivities as $index => $actData) {
-                $activityId = $actData['id'] ?? null;
-                $sortOrder = $actData['sort_order'] ?? ($index + 1);
-
-                $payload = [
-                    'sort_order' => $sortOrder,
-                    'activity_text' => $actData['activity_text'] ?? '',
-                    'kpi_text' => $actData['kpi_text'] ?? '',
-                    'target_value' => isset($actData['target_value']) && $actData['target_value'] !== '' ? (float) $actData['target_value'] : null,
-                    'target_label' => $actData['target_label'] ?? null,
-                    'actual_value' => isset($actData['actual_value']) && $actData['actual_value'] !== '' ? (float) $actData['actual_value'] : null,
-                    'actual_label' => $actData['actual_label'] ?? null,
-                    'direction' => $actData['direction'] ?? 'higher_better',
-                    'perspective' => $actData['perspective'] ?? 'customers',
-                ];
-
-                if ($activityId && in_array($activityId, $existingActivityIds, true)) {
-                    Activity::where('id', $activityId)
-                        ->where('report_member_id', $reportMember->id)
-                        ->update($payload);
-                    $keptActivityIds[] = $activityId;
-                } else {
-                    $newActivity = $reportMember->activities()->create($payload);
-                    $keptActivityIds[] = $newActivity->id;
+            $updateData = [];
+            foreach (['achievements', 'challenges', 'next_steps', 'signed', 'readiness_note', 'weights'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $updateData[$field] = $validated[$field];
                 }
             }
 
-            // Delete activities that were removed
-            $toDelete = array_diff($existingActivityIds, $keptActivityIds);
-            if (! empty($toDelete)) {
-                Activity::whereIn('id', $toDelete)->delete();
+            if (! empty($updateData)) {
+                $reportMember->update($updateData);
+            }
+
+            if (array_key_exists('activities', $validated) && is_array($validated['activities'])) {
+                $incomingActivities = $validated['activities'];
+                $existingActivityIds = $reportMember->activities()->pluck('id')->toArray();
+                $keptActivityIds = [];
+
+                foreach ($incomingActivities as $index => $actData) {
+                    $activityId = $actData['id'] ?? null;
+                    $sortOrder = $actData['sort_order'] ?? ($index + 1);
+
+                    $payload = [
+                        'sort_order' => $sortOrder,
+                        'activity_text' => $actData['activity_text'] ?? '',
+                        'kpi_text' => $actData['kpi_text'] ?? '',
+                        'target_value' => isset($actData['target_value']) && $actData['target_value'] !== '' ? (float) $actData['target_value'] : null,
+                        'target_label' => $actData['target_label'] ?? null,
+                        'actual_value' => isset($actData['actual_value']) && $actData['actual_value'] !== '' ? (float) $actData['actual_value'] : null,
+                        'actual_label' => $actData['actual_label'] ?? null,
+                        'direction' => $actData['direction'] ?? 'higher_better',
+                        'perspective' => $actData['perspective'] ?? 'customers',
+                    ];
+
+                    if ($activityId && in_array($activityId, $existingActivityIds, true)) {
+                        Activity::where('id', $activityId)
+                            ->where('report_member_id', $reportMember->id)
+                            ->update($payload);
+                        $keptActivityIds[] = $activityId;
+                    } else {
+                        $newActivity = $reportMember->activities()->create($payload);
+                        $keptActivityIds[] = $newActivity->id;
+                    }
+                }
+
+                // Delete activities that were removed
+                $toDelete = array_diff($existingActivityIds, $keptActivityIds);
+                if (! empty($toDelete)) {
+                    Activity::whereIn('id', $toDelete)->delete();
+                }
             }
         });
 

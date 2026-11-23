@@ -17,8 +17,12 @@ class ReportDecisionController extends Controller
             'plc_gate_enabled' => 'required|boolean',
             'min_paying_customers' => 'nullable|integer|min:0',
             'min_mrr' => 'nullable|numeric|min:0',
+            'actual_paying_customers' => 'nullable|integer|min:0',
+            'actual_mrr' => 'nullable|numeric|min:0',
             'decision_text_am' => 'nullable|string',
             'expansion_text_am' => 'nullable|string',
+            'decisions_list' => 'nullable|array',
+            'decisions_list.*' => 'nullable|string',
         ]);
 
         $decision = $report->decision()->updateOrCreate(

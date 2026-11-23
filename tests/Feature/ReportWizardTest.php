@@ -297,3 +297,78 @@ test('saving member is blocked when weights do not total 100', function () {
     $response->assertStatus(422)
         ->assertJsonValidationErrors(['weights']);
 });
+
+test('autosaving decision updates actuals, gate criteria and decisions list', function () {
+    $report = Report::factory()->create();
+
+    $payload = [
+        'plc_gate_enabled' => true,
+        'min_paying_customers' => 20,
+        'min_mrr' => 150000.00,
+        'actual_paying_customers' => 25,
+        'actual_mrr' => 165000.00,
+        'decision_text_am' => 'መስፈርቱን ስላሟላን ወደ PLC እንሸጋገራለን።',
+        'expansion_text_am' => 'በቀጣይ ሩብ ዓመት ተጨማሪ ካፒታል ማሰባሰብ።',
+        'decisions_list' => [
+            'ኃ/የተ/የግ/ማህበር (PLC) ምዝገባ ማጠናቀቅ',
+            'የአገልግሎት መስፋፋት ማካሄድ',
+            'ተጨማሪ 2 የቴክኖሎጂ ባለሙያዎችን መቅጠር',
+        ],
+    ];
+
+    $response = $this->actingAs($this->user)->patchJson(
+        route('reports.decision.update', $report->id),
+        $payload
+    );
+
+    $response->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('decision.actual_paying_customers', 25)
+        ->assertJsonPath('decision.decisions_list.2', 'ተጨማሪ 2 የቴክኖሎጂ ባለሙያዎችን መቅጠር');
+
+    // Reload from fresh database query
+    $decision = $report->fresh()->decision;
+    expect($decision->plc_gate_enabled)->toBeTrue()
+        ->and($decision->min_paying_customers)->toBe(20)
+        ->and((float) $decision->min_mrr)->toBe(150000.00)
+        ->and($decision->actual_paying_customers)->toBe(25)
+        ->and((float) $decision->actual_mrr)->toBe(165000.00)
+        ->and($decision->decisions_list)->toHaveCount(3)
+        ->and($decision->decisions_list[0])->toBe('ኃ/የተ/የግ/ማህበር (PLC) ምዝገባ ማጠናቀቅ');
+});
+
+test('member readiness_note persists and does not wipe activities when omitted', function () {
+    $report = Report::factory()->create();
+    $member = Member::first();
+    $reportMember = $report->reportMembers()->create([
+        'member_id' => $member->id,
+        'weights' => $member->default_weights,
+    ]);
+
+    $activity = $reportMember->activities()->create([
+        'sort_order' => 1,
+        'activity_text' => 'Sales Meetings',
+        'kpi_text' => 'Meetings conducted',
+        'target_value' => 20,
+        'actual_value' => 22,
+        'direction' => 'higher_better',
+        'perspective' => 'customers',
+    ]);
+
+    // Update only readiness_note
+    $response = $this->actingAs($this->user)->patchJson(
+        route('reports.members.update', [$report->id, $reportMember->id]),
+        [
+            'readiness_note' => 'ለ PLC ሽግግር ሙሉ በሙሉ ዝግጁ ነው፤ አዳዲስ ሰራተኞችን ማሰልጠን ይቀጥላል።',
+        ]
+    );
+
+    $response->assertOk()
+        ->assertJsonPath('success', true);
+
+    $refreshed = $reportMember->fresh();
+    expect($refreshed->readiness_note)->toBe('ለ PLC ሽግግር ሙሉ በሙሉ ዝግጁ ነው፤ አዳዲስ ሰራተኞችን ማሰልጠን ይቀጥላል።')
+        // Ensure activities were not deleted!
+        ->and($refreshed->activities)->toHaveCount(1)
+        ->and($refreshed->activities->first()->id)->toBe($activity->id);
+});

@@ -124,8 +124,14 @@ class ReportController extends Controller
                 'plc_gate_enabled' => $priorReport?->decision?->plc_gate_enabled ?? true,
                 'min_paying_customers' => $priorReport?->decision?->min_paying_customers ?? 20,
                 'min_mrr' => $priorReport?->decision?->min_mrr ?? 150000.00,
+                'actual_paying_customers' => null,
+                'actual_mrr' => null,
                 'decision_text_am' => $priorReport?->decision?->decision_text_am ?? 'ወደ ኃላፊነቱ የተወሰነ የግል ማህበር (PLC) ለመሸጋገር የተጣሉ ቅድመ ሁኔታዎች ተሟልተዋል።',
                 'expansion_text_am' => $priorReport?->decision?->expansion_text_am ?? 'በሚቀጥለው ሩብ ዓመት ተጨማሪ የሽያጭ ባለሙያ መቅጠርና ቢሮ ማስፋፋት።',
+                'decisions_list' => $priorReport?->decision?->decisions_list ?? [
+                    'ኃ/የተ/የግ/ማህበር (PLC) ምዝገባ እና የሕግ ማዕቀፍ ማጠናቀቅ',
+                    'የአገልግሎት እና የምርት መስፋፋት ማካሄድ',
+                ],
             ]);
 
             return $report;
@@ -156,8 +162,14 @@ class ReportController extends Controller
                 'plc_gate_enabled' => true,
                 'min_paying_customers' => 20,
                 'min_mrr' => 150000.00,
+                'actual_paying_customers' => null,
+                'actual_mrr' => null,
                 'decision_text_am' => 'ወደ ኃላፊነቱ የተወሰነ የግል ማህበር (PLC) ለመሸጋገር የተጣሉ ቅድመ ሁኔታዎች ተሟልተዋል።',
                 'expansion_text_am' => 'በሚቀጥለው ሩብ ዓመት ተጨማሪ የሽያጭ ባለሙያ መቅጠርና ቢሮ ማስፋፋት።',
+                'decisions_list' => [
+                    'ኃ/የተ/የግ/ማህበር (PLC) ምዝገባ እና የሕግ ማዕቀፍ ማጠናቀቅ',
+                    'የአገልግሎት እና የምርት መስፋፋት ማካሄድ',
+                ],
             ]);
             $report->load('decision');
         }

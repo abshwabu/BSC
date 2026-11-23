@@ -24,6 +24,7 @@ class ReportMember extends Model
         'challenges',
         'next_steps',
         'signed',
+        'readiness_note',
     ];
 
     /**

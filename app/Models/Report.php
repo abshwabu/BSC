@@ -130,6 +130,7 @@ class Report extends Model
                     'challenges' => null,
                     'next_steps' => null,
                     'signed' => false,
+                    'readiness_note' => null,
                 ]);
 
                 foreach ($reportMember->activities as $activity) {
@@ -152,8 +153,11 @@ class Report extends Model
                     'plc_gate_enabled' => $this->decision->plc_gate_enabled,
                     'min_paying_customers' => $this->decision->min_paying_customers,
                     'min_mrr' => $this->decision->min_mrr,
+                    'actual_paying_customers' => null,
+                    'actual_mrr' => null,
                     'decision_text_am' => $this->decision->decision_text_am,
                     'expansion_text_am' => $this->decision->expansion_text_am,
+                    'decisions_list' => $this->decision->decisions_list,
                 ]);
             }
 

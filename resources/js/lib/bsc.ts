@@ -473,3 +473,91 @@ export function calculateCompanySummary(memberSummaries: MemberSummary[]): Compa
         rating: getRatingLabel(avgScore),
     };
 }
+
+export interface GateEvaluation {
+    enabled: boolean;
+    is_met: boolean;
+    customers_met: boolean;
+    mrr_met: boolean;
+    status: 'met' | 'not_met' | 'disabled';
+    suggested_decision_am: string;
+    suggested_decision_en: string;
+}
+
+/**
+ * Evaluate the PLC transition readiness gate.
+ */
+export function evaluateGate(
+    plcGateEnabled: boolean,
+    minCustomers: number | null | undefined,
+    minMrr: number | null | undefined,
+    actualCustomers: number | null | undefined,
+    actualMrr: number | null | undefined
+): GateEvaluation {
+    if (!plcGateEnabled) {
+        return {
+            enabled: false,
+            is_met: false,
+            customers_met: false,
+            mrr_met: false,
+            status: 'disabled',
+            suggested_decision_am: '',
+            suggested_decision_en: '',
+        };
+    }
+
+    const minCust = minCustomers != null && !isNaN(Number(minCustomers)) ? Number(minCustomers) : 0;
+    const minRev = minMrr != null && !isNaN(Number(minMrr)) ? Number(minMrr) : 0.0;
+    const actCust = actualCustomers != null && !isNaN(Number(actualCustomers)) ? Number(actualCustomers) : 0;
+    const actRev = actualMrr != null && !isNaN(Number(actualMrr)) ? Number(actualMrr) : 0.0;
+
+    const customersMet = actCust >= minCust;
+    const mrrMet = actRev >= minRev;
+    const isMet = customersMet && mrrMet;
+
+    return {
+        enabled: true,
+        is_met: isMet,
+        customers_met: customersMet,
+        mrr_met: mrrMet,
+        status: isMet ? 'met' : 'not_met',
+        suggested_decision_am: generateDecisionTemplate(isMet, minCust, minRev, actCust, actRev, 'am'),
+        suggested_decision_en: generateDecisionTemplate(isMet, minCust, minRev, actCust, actRev, 'en'),
+    };
+}
+
+/**
+ * Generate decision statement text for PLC transition.
+ */
+export function generateDecisionTemplate(
+    isMet: boolean,
+    minCustomers: number,
+    minMrr: number,
+    actualCustomers: number,
+    actualMrr: number,
+    locale: 'am' | 'en' = 'am'
+): string {
+    const minMrrFormatted = Number(minMrr).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const actualMrrFormatted = Number(actualMrr).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (locale === 'en') {
+        return isMet
+            ? `As the company achieved ${minCustomers} paying customers and ${minMrrFormatted} ETB MRR according to its strategic plan (report shows ${actualCustomers} customers and ${actualMrrFormatted} ETB MRR); it has met the requirements for transition to a Private Limited Company (PLC).`
+            : `As the company has not yet fully met the minimum benchmarks of ${minCustomers} paying customers and ${minMrrFormatted} ETB MRR (report shows ${actualCustomers} customers and ${actualMrrFormatted} ETB MRR); the PLC transition is deferred until benchmarks are satisfied.`;
+    }
+
+    return isMet
+        ? `ድርጅቱ በስትራቴጂክ እቅዱ መሰረት ${minCustomers} የሚከፍሉ ደንበኞችን እና ${minMrrFormatted} ETB MRR ማሳካት በመቻሉ (በሪፖርቱ መሰረት ${actualCustomers} ደንበኞች እና ${actualMrrFormatted} ETB MRR)፤ ወደ ኃ/የተ/የግ/ማህበር (PLC) ሽግግር ለማድረግ የተቀመጠውን መስፈርት አሟልቷል።`
+        : `ድርጅቱ በስትራቴጂክ እቅዱ መሰረት የተቀመጠውን ${minCustomers} የሚከፍሉ ደንበኞች እና ${minMrrFormatted} ETB MRR መስፈርት እስካሁን ሙሉ በሙሉ ያላሟላ በመሆኑ (በሪፖርቱ መሰረት ${actualCustomers} ደንበኞች እና ${actualMrrFormatted} ETB MRR)፤ የ PLC ሽግግር መስፈርቱ እስኪሟላ ድረስ በነባር ማዕቀፍ እየሰራ ይቆያል።`;
+}
+
+export const DEFAULT_EXECUTIVE_DECISIONS: Record<'am' | 'en', string[]> = {
+    am: [
+        'ኃ/የተ/የግ/ማህበር (PLC) ምዝገባ እና የሕግ ማዕቀፍ ማጠናቀቅ',
+        'የአገልግሎት እና የምርት መስፋፋት ማካሄድ',
+    ],
+    en: [
+        'Complete Private Limited Company (PLC) registration and legal structure',
+        'Execute service and core product expansion',
+    ],
+};
