@@ -5,6 +5,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
+import LanguageToggle from '@/Components/LanguageToggle.vue';
 import { Link } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
@@ -12,9 +13,9 @@ const showingNavigationDropdown = ref(false);
 
 <template>
     <div>
-        <div class="min-h-screen bg-gray-100">
+        <div class="min-h-screen bg-gray-100 font-sans">
             <nav
-                class="border-b border-gray-100 bg-white"
+                class="border-b border-gray-100 bg-white shadow-sm"
             >
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -22,10 +23,9 @@ const showingNavigationDropdown = ref(false);
                         <div class="flex">
                             <!-- Logo -->
                             <div class="flex shrink-0 items-center">
-                                <Link :href="route('dashboard')">
-                                    <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800"
-                                    />
+                                <Link :href="route('reports.index')" class="flex items-center gap-2">
+                                    <span class="text-2xl font-bold bg-indigo-600 text-white w-9 h-9 rounded-lg flex items-center justify-center shadow">📊</span>
+                                    <span class="text-lg font-bold text-gray-800 tracking-tight">{{ $t('app_name') }}</span>
                                 </Link>
                             </div>
 
@@ -34,15 +34,17 @@ const showingNavigationDropdown = ref(false);
                                 class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
                             >
                                 <NavLink
-                                    :href="route('dashboard')"
-                                    :active="route().current('dashboard')"
+                                    :href="route('reports.index')"
+                                    :active="route().current('reports.*')"
                                 >
-                                    Dashboard
+                                    {{ $t('nav.reports') }}
                                 </NavLink>
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center">
+                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-3">
+                            <LanguageToggle />
+
                             <!-- Settings Dropdown -->
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
@@ -141,10 +143,10 @@ const showingNavigationDropdown = ref(false);
                 >
                     <div class="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            :active="route().current('dashboard')"
+                            :href="route('reports.index')"
+                            :active="route().current('reports.*')"
                         >
-                            Dashboard
+                            {{ $t('nav.reports') }}
                         </ResponsiveNavLink>
                     </div>
 
@@ -152,15 +154,18 @@ const showingNavigationDropdown = ref(false);
                     <div
                         class="border-t border-gray-200 pb-1 pt-4"
                     >
-                        <div class="px-4">
-                            <div
-                                class="text-base font-medium text-gray-800"
-                            >
-                                {{ $page.props.auth.user.name }}
+                        <div class="px-4 flex items-center justify-between">
+                            <div>
+                                <div
+                                    class="text-base font-medium text-gray-800"
+                                >
+                                    {{ $page.props.auth.user.name }}
+                                </div>
+                                <div class="text-sm font-medium text-gray-500">
+                                    {{ $page.props.auth.user.email }}
+                                </div>
                             </div>
-                            <div class="text-sm font-medium text-gray-500">
-                                {{ $page.props.auth.user.email }}
-                            </div>
+                            <LanguageToggle />
                         </div>
 
                         <div class="mt-3 space-y-1">

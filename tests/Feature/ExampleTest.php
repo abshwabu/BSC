@@ -8,10 +8,10 @@ it('redirects unauthenticated users from root to login', function () {
     $response->assertRedirect('/login');
 });
 
-it('allows authenticated users to access dashboard', function () {
+it('allows authenticated users to access dashboard and redirects to reports', function () {
     $user = User::factory()->create();
 
     $response = $this->actingAs($user)->get('/dashboard');
 
-    $response->assertStatus(200);
+    $response->assertRedirect('/reports');
 });
