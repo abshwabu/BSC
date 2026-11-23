@@ -40,6 +40,18 @@ class ReportMemberController extends Controller
             'activities.*.perspective' => 'required|in:financial,customers,internal,learning',
         ]);
 
+        if (isset($validated['weights']) && ! empty($validated['weights'])) {
+            $sum = array_sum(array_map('floatval', $validated['weights']));
+            if (abs($sum - 100.0) > 0.01) {
+                return response()->json([
+                    'message' => 'የክብደቶች ድምር በትክክል 100% መሆን አለበት። የአሁን ድምር፡ '.$sum.'%',
+                    'errors' => [
+                        'weights' => ['The sum of perspective weights must equal exactly 100%. Current sum: '.$sum.'%'],
+                    ],
+                ], 422);
+            }
+        }
+
         DB::transaction(function () use ($reportMember, $validated) {
             $reportMember->update([
                 'achievements' => $validated['achievements'] ?? $reportMember->achievements,

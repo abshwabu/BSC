@@ -271,3 +271,29 @@ test('new report automatically copies previous quarter activities when prior rep
             ->and($act->actual_value)->toBeNull();
     }
 });
+
+test('saving member is blocked when weights do not total 100', function () {
+    $report = Report::factory()->create();
+    $member = Member::first();
+    $reportMember = $report->reportMembers()->create([
+        'member_id' => $member->id,
+        'weights' => $member->default_weights,
+    ]);
+
+    // Invalid weights totaling 90% (30 + 30 + 20 + 10)
+    $response = $this->actingAs($this->user)->patchJson(
+        route('reports.members.update', [$report->id, $reportMember->id]),
+        [
+            'weights' => [
+                'financial' => 30,
+                'customers' => 30,
+                'internal' => 20,
+                'learning' => 10,
+            ],
+            'activities' => [],
+        ]
+    );
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['weights']);
+});

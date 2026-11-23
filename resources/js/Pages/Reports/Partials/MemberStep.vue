@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
+import PerspectiveSummaryCard from '@/Components/PerspectiveSummaryCard.vue';
 import {
     calculateAchievementPercentage,
     calculateScoreFromPercentage,
@@ -31,8 +32,14 @@ const achievements = ref('');
 const challenges = ref('');
 const nextSteps = ref('');
 const signed = ref(false);
-const weights = ref({});
+const weights = ref({
+    financial: 25,
+    customers: 25,
+    internal: 25,
+    learning: 25,
+});
 
+const showWeightsEditor = ref(false);
 const saveStatus = ref('saved'); // 'saved' | 'saving' | 'unsaved' | 'error'
 const errorMessage = ref('');
 
@@ -56,14 +63,50 @@ function initData() {
     challenges.value = props.reportMember.challenges || '';
     nextSteps.value = props.reportMember.next_steps || '';
     signed.value = Boolean(props.reportMember.signed);
-    weights.value = { ...(props.reportMember.weights || props.reportMember.member?.default_weights || {}) };
+    weights.value = {
+        financial: Number(props.reportMember.weights?.financial ?? props.reportMember.member?.default_weights?.financial ?? 25),
+        customers: Number(props.reportMember.weights?.customers ?? props.reportMember.member?.default_weights?.customers ?? 25),
+        internal: Number(props.reportMember.weights?.internal ?? props.reportMember.member?.default_weights?.internal ?? 25),
+        learning: Number(props.reportMember.weights?.learning ?? props.reportMember.member?.default_weights?.learning ?? 25),
+    };
 
     saveStatus.value = 'saved';
+    errorMessage.value = '';
 }
 
 watch(() => props.reportMember.id, () => {
     initData();
 }, { immediate: true });
+
+// Weights validation
+const weightsSum = computed(() => {
+    return (
+        (Number(weights.value.financial) || 0) +
+        (Number(weights.value.customers) || 0) +
+        (Number(weights.value.internal) || 0) +
+        (Number(weights.value.learning) || 0)
+    );
+});
+
+const isWeightsValid = computed(() => {
+    return Math.abs(weightsSum.value - 100) < 0.01;
+});
+
+function resetWeightsToDefault() {
+    const defaults = props.reportMember.member?.default_weights || {
+        financial: 25,
+        customers: 25,
+        internal: 25,
+        learning: 25,
+    };
+    weights.value = {
+        financial: Number(defaults.financial ?? 25),
+        customers: Number(defaults.customers ?? 25),
+        internal: Number(defaults.internal ?? 25),
+        learning: Number(defaults.learning ?? 25),
+    };
+    triggerAutosave();
+}
 
 // Live calculation of member performance using TS scoring lib
 const memberSummary = computed(() => {
@@ -154,12 +197,87 @@ function handleKeydown(event, index, isLastField) {
     }
 }
 
+// Auto-Draft Helper ("Suggest from data")
+function autoDraftComments() {
+    const scoredActivities = [];
+
+    for (const act of activities.value) {
+        if (act.target_value !== '' && act.target_value !== null && act.actual_value !== '' && act.actual_value !== null) {
+            const tVal = Number(act.target_value);
+            const aVal = Number(act.actual_value);
+            const pct = calculateAchievementPercentage(tVal, aVal, act.direction);
+            const label = act.kpi_text || act.activity_text || 'ተግባር';
+            scoredActivities.push({
+                label,
+                target: tVal,
+                targetLabel: act.target_label || '',
+                actual: aVal,
+                actualLabel: act.actual_label || '',
+                pct: roundTo(pct, 1),
+            });
+        }
+    }
+
+    if (scoredActivities.length === 0) {
+        alert(locale.value === 'en' ? 'Please enter targets and actuals first to generate suggestions.' : 'እባክዎ መጀመሪያ ዒላማ እና ክንውን ቁጥሮችን ያስገቡ።');
+        return;
+    }
+
+    // Sort descending by percentage
+    scoredActivities.sort((a, b) => b.pct - a.pct);
+
+    // Top 2 activities for achievements
+    const topActivities = scoredActivities.slice(0, 2);
+    let draftAchievements = locale.value === 'en'
+        ? 'Key accomplishments recorded this quarter:\n'
+        : 'በዚህ ሩብ ዓመት የተመዘገቡ ዋና ዋና ስኬቶች:\n';
+
+    topActivities.forEach((act) => {
+        const tStr = `${act.target} ${act.targetLabel}`.trim();
+        const aStr = `${act.actual} ${act.actualLabel}`.trim();
+        draftAchievements += `• ${act.label}፡ ${aStr} ከ ${tStr} (${act.pct}%)\n`;
+    });
+
+    // Lowest activity under 100% for challenges
+    const underTargetActivities = scoredActivities.filter((a) => a.pct < 100);
+    let draftChallenges = '';
+
+    if (underTargetActivities.length > 0) {
+        const lowest = underTargetActivities[underTargetActivities.length - 1];
+        const tStr = `${lowest.target} ${lowest.targetLabel}`.trim();
+        const aStr = `${lowest.actual} ${lowest.actualLabel}`.trim();
+        draftChallenges = locale.value === 'en'
+            ? `Bottlenecks requiring attention and improvement:\n• ${lowest.label} achieved ${aStr} against target of ${tStr} (${lowest.pct}%).`
+            : `ትኩረት የሚሹ እና ዝቅተኛ አፈፃፀም ያሳዩ ተግባራት:\n• ${lowest.label}፡ ${aStr} ከ ${tStr} (${lowest.pct}%)።`;
+    } else {
+        draftChallenges = locale.value === 'en'
+            ? 'All activities achieved or exceeded targets; continuous scaling required.'
+            : 'ሁሉም የታቀዱ ተግባራት ከ 100% በላይ ተከናውነዋል፤ ቀጣይነት ያለው እድገት ማስጠበቅ ያስፈልጋል።';
+    }
+
+    achievements.value = draftAchievements.trim();
+    challenges.value = draftChallenges.trim();
+
+    triggerAutosave();
+}
+
 // Debounced Autosave
 let debounceTimer = null;
 
 function triggerAutosave() {
+    if (!isWeightsValid.value) {
+        saveStatus.value = 'error';
+        errorMessage.value = locale.value === 'en'
+            ? `Weights must total 100%. Current sum: ${weightsSum.value}%`
+            : `የክብደቶች ድምር በትክክል 100% መሆን አለበት። የአሁን ድምር፡ ${weightsSum.value}%`;
+        emit('save-status', 'error');
+        return;
+    }
+
     saveStatus.value = 'unsaved';
+    errorMessage.value = '';
     emit('save-status', 'unsaved');
+
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
         saveNow();
@@ -168,6 +286,15 @@ function triggerAutosave() {
 
 // Save immediately
 async function saveNow() {
+    if (!isWeightsValid.value) {
+        saveStatus.value = 'error';
+        errorMessage.value = locale.value === 'en'
+            ? `Weights must total 100%. Current sum: ${weightsSum.value}%`
+            : `የክብደቶች ድምር በትክክል 100% መሆን አለበት። የአሁን ድምር፡ ${weightsSum.value}%`;
+        emit('save-status', 'error');
+        return;
+    }
+
     if (debounceTimer) clearTimeout(debounceTimer);
     saveStatus.value = 'saving';
     emit('save-status', 'saving');
@@ -179,7 +306,12 @@ async function saveNow() {
             challenges: challenges.value,
             next_steps: nextSteps.value,
             signed: signed.value,
-            weights: weights.value,
+            weights: {
+                financial: Number(weights.value.financial),
+                customers: Number(weights.value.customers),
+                internal: Number(weights.value.internal),
+                learning: Number(weights.value.learning),
+            },
             activities: activities.value.map((a, idx) => ({
                 id: a.id || null,
                 sort_order: idx + 1,
@@ -200,7 +332,6 @@ async function saveNow() {
         );
 
         if (res.data?.success && res.data?.report_member) {
-            // Update activity IDs from DB
             const serverActs = res.data.report_member.activities || [];
             activities.value.forEach((act, idx) => {
                 if (serverActs[idx]) {
@@ -281,13 +412,14 @@ async function saveNow() {
                             class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800"
                         >
                             <span>⚠️</span>
-                            <span>{{ $t('member_step.autosave_status.error') }}</span>
+                            <span>{{ errorMessage || $t('member_step.autosave_status.error') }}</span>
                         </span>
 
                         <button
                             type="button"
                             @click="saveNow"
-                            class="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400 underline"
+                            :disabled="!isWeightsValid"
+                            class="px-2.5 py-1 text-xs font-medium text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400 underline disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             {{ $t('member_step.save_now') }}
                         </button>
@@ -295,23 +427,130 @@ async function saveNow() {
                 </div>
             </div>
 
-            <!-- Perspective Weights Badges -->
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-                <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    {{ $t('member_step.weights_label') }}:
-                </span>
-                <span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
-                    {{ $t('perspectives.financial') }}: {{ weights.financial ?? 0 }}%
-                </span>
-                <span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-100 dark:border-purple-800">
-                    {{ $t('perspectives.customers') }}: {{ weights.customers ?? 0 }}%
-                </span>
-                <span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-100 dark:border-amber-800">
-                    {{ $t('perspectives.internal') }}: {{ weights.internal ?? 0 }}%
-                </span>
-                <span class="px-2.5 py-1 rounded-md text-xs font-semibold bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border border-teal-100 dark:border-teal-800">
-                    {{ $t('perspectives.learning') }}: {{ weights.learning ?? 0 }}%
-                </span>
+            <!-- Perspective Weights Badges & Edit Button -->
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {{ $t('member_step.weights_label') }}:
+                    </span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                        {{ $t('perspectives.financial') }}: {{ weights.financial }}%
+                    </span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-100 dark:border-purple-800">
+                        {{ $t('perspectives.customers') }}: {{ weights.customers }}%
+                    </span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-100 dark:border-amber-800">
+                        {{ $t('perspectives.internal') }}: {{ weights.internal }}%
+                    </span>
+                    <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border border-teal-100 dark:border-teal-800">
+                        {{ $t('perspectives.learning') }}: {{ weights.learning }}%
+                    </span>
+                </div>
+
+                <div>
+                    <button
+                        type="button"
+                        @click="showWeightsEditor = !showWeightsEditor"
+                        class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                    >
+                        <span>⚙️</span>
+                        <span>{{ showWeightsEditor ? 'ክብደቶችን ደብቅ' : 'ክብደቶችን አርትዕ (Edit Weights)' }}</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Task 2: Weights Editor with 4 inputs and 100% check -->
+            <div
+                v-if="showWeightsEditor"
+                class="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200 dark:border-gray-700 space-y-3"
+            >
+                <div class="flex items-center justify-between">
+                    <h5 class="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">
+                        የ BSC እይታዎች ክብደት ማስተካከያ (Perspective Weights Editor)
+                    </h5>
+                    <button
+                        type="button"
+                        @click="resetWeightsToDefault"
+                        class="text-xs font-semibold text-gray-600 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300 underline"
+                    >
+                        🔄 ወደ ነባሪ መልስ (Reset to member default)
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">
+                            {{ $t('perspectives.financial') }} (%)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            v-model.number="weights.financial"
+                            @input="triggerAutosave"
+                            class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">
+                            {{ $t('perspectives.customers') }} (%)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            v-model.number="weights.customers"
+                            @input="triggerAutosave"
+                            class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">
+                            {{ $t('perspectives.internal') }} (%)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            v-model.number="weights.internal"
+                            @input="triggerAutosave"
+                            class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">
+                            {{ $t('perspectives.learning') }} (%)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            v-model.number="weights.learning"
+                            @input="triggerAutosave"
+                            class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                    </div>
+                </div>
+
+                <!-- Total Indicator & Validation Error -->
+                <div class="flex items-center justify-between pt-2 border-t border-gray-200/80 dark:border-gray-700 text-xs">
+                    <span class="font-bold text-gray-700 dark:text-gray-300">
+                        ድምር ክብደት (Total Weight):
+                        <span
+                            class="px-2 py-0.5 rounded-full font-black text-xs ml-1"
+                            :class="isWeightsValid ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'"
+                        >
+                            {{ weightsSum }}%
+                        </span>
+                    </span>
+
+                    <span v-if="!isWeightsValid" class="text-xs font-bold text-red-600 dark:text-red-400">
+                        ⚠️ የክብደቶች ድምር በትክክል 100% መሆን አለበት። (Total must equal 100%)
+                    </span>
+                    <span v-else class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        ✓ ክብደቶች በትክክል 100% ደርሰዋል
+                    </span>
+                </div>
             </div>
         </div>
 
@@ -550,94 +789,100 @@ async function saveNow() {
                     </tfoot>
                 </table>
             </div>
-
-            <!-- Perspective Sub-Cards -->
-            <div class="p-4 bg-gray-50/70 dark:bg-gray-900/40 border-t border-gray-100 dark:border-gray-700">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div
-                        v-for="(meta, pKey) in memberSummary.perspectives"
-                        :key="pKey"
-                        class="p-3 rounded-lg border bg-white dark:bg-gray-800 shadow-xs"
-                        :class="meta.excluded ? 'border-dashed border-gray-300 dark:border-gray-700 opacity-60' : 'border-gray-200 dark:border-gray-700'"
-                    >
-                        <div class="flex items-center justify-between text-xs mb-1">
-                            <span class="font-bold text-gray-800 dark:text-gray-200">
-                                {{ locale === 'en' ? meta.name_en : meta.name_am }}
-                            </span>
-                            <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                                {{ roundTo(meta.effective_weight, 1) }}%
-                            </span>
-                        </div>
-
-                        <div v-if="!meta.excluded" class="flex items-baseline justify-between mt-2">
-                            <span class="text-xs font-semibold text-gray-500">
-                                {{ meta.average_percentage_rounded }}%
-                            </span>
-                            <span class="text-sm font-black text-indigo-600 dark:text-indigo-400">
-                                {{ meta.score_summary_rounded }} / 5.0
-                            </span>
-                        </div>
-                        <div v-else class="text-xs text-gray-400 italic mt-2">
-                            (ምንም ተግባር አልተመዘገበም - ክብደት ተከፋፍሏል)
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
-        <!-- Reflection, Challenges & Next Steps -->
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 space-y-4">
-            <h4 class="font-bold text-gray-900 dark:text-white text-base flex items-center gap-2">
-                <span>📝</span>
-                <span>የመስራቹ ማጠቃለያ ማስታወሻዎች (Reflection & Notes)</span>
-            </h4>
+        <!-- Task 1: Individual BSC summary card (read-only, live) -->
+        <PerspectiveSummaryCard :summary="memberSummary" :weights="weights" />
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Task 3, 4 & 5: Reflection, Challenges, Next Steps & Signature -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-700 pb-3">
+                <h4 class="font-bold text-gray-900 dark:text-white text-base flex items-center gap-2">
+                    <span>📝</span>
+                    <span>የመስራቹ ማጠቃለያ ማስታወሻዎች (Comments & Follow-up)</span>
+                </h4>
+
+                <!-- Task 4: Auto-draft helper button -->
+                <button
+                    type="button"
+                    @click="autoDraftComments"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition-colors shadow-xs"
+                >
+                    <span>✨</span>
+                    <span>ከመረጃው ረቂቅ አመንጭ (Suggest from data)</span>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <!-- Achievements -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                        {{ $t('member_step.achievements_label') }}
-                    </label>
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-gray-800 dark:text-gray-200">
+                            {{ $t('member_step.achievements_label') }}
+                        </label>
+                        <span class="text-[10px] text-gray-400 font-semibold">
+                            {{ achievements.length }} ፊደላት
+                        </span>
+                    </div>
                     <textarea
                         v-model="achievements"
                         @input="triggerAutosave"
-                        rows="3"
-                        class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
+                        rows="4"
+                        class="block w-full text-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
                         :placeholder="$t('member_step.achievements_placeholder')"
                     ></textarea>
+                    <span class="text-[10px] text-gray-400 block italic">
+                        ምክር፡ ከ 50 - 500 ፊደላት (Recommended: 50–500 chars)
+                    </span>
                 </div>
 
                 <!-- Challenges -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                        {{ $t('member_step.challenges_label') }}
-                    </label>
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-gray-800 dark:text-gray-200">
+                            {{ $t('member_step.challenges_label') }}
+                        </label>
+                        <span class="text-[10px] text-gray-400 font-semibold">
+                            {{ challenges.length }} ፊደላት
+                        </span>
+                    </div>
                     <textarea
                         v-model="challenges"
                         @input="triggerAutosave"
-                        rows="3"
-                        class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
+                        rows="4"
+                        class="block w-full text-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
                         :placeholder="$t('member_step.challenges_placeholder')"
                     ></textarea>
+                    <span class="text-[10px] text-gray-400 block italic">
+                        ምክር፡ ከ 50 - 500 ፊደላት (Recommended: 50–500 chars)
+                    </span>
                 </div>
 
                 <!-- Next Steps -->
-                <div>
-                    <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                        {{ $t('member_step.next_steps_label') }}
-                    </label>
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-bold text-gray-800 dark:text-gray-200">
+                            {{ $t('member_step.next_steps_label') }}
+                        </label>
+                        <span class="text-[10px] text-gray-400 font-semibold">
+                            {{ nextSteps.length }} ፊደላት
+                        </span>
+                    </div>
                     <textarea
                         v-model="nextSteps"
                         @input="triggerAutosave"
-                        rows="3"
-                        class="block w-full text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
+                        rows="4"
+                        class="block w-full text-xs rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-white focus:border-indigo-500 focus:ring-indigo-500"
                         :placeholder="$t('member_step.next_steps_placeholder')"
                     ></textarea>
+                    <span class="text-[10px] text-gray-400 block italic">
+                        ምክር፡ ከ 50 - 500 ፊደላት (Recommended: 50–500 chars)
+                    </span>
                 </div>
             </div>
 
-            <!-- Signed checkbox -->
-            <div class="pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <!-- Task 5: Signature line and verified stamp -->
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <label class="inline-flex items-center gap-2.5 cursor-pointer">
                     <input
                         type="checkbox"
@@ -645,18 +890,29 @@ async function saveNow() {
                         @change="triggerAutosave"
                         class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                     />
-                    <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    <span class="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200">
                         {{ $t('member_step.signed_label') }}
                     </span>
                 </label>
 
-                <button
-                    type="button"
-                    @click="addRow"
-                    class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400"
-                >
-                    <span>➕ {{ $t('member_step.add_row_short') }}</span>
-                </button>
+                <!-- Static Signature Line vs Visual Verified Stamp -->
+                <div class="flex items-center gap-3">
+                    <div
+                        v-if="signed"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 border-2 border-emerald-600 dark:border-emerald-500 rounded-lg text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 font-black text-xs uppercase tracking-wider shadow-xs"
+                    >
+                        <span>✓</span>
+                        <span>የተረጋገጠ እና የተፈረመ (VERIFIED & SIGNED)</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">• {{ reportMember.member?.name }}</span>
+                    </div>
+
+                    <div
+                        v-else
+                        class="text-xs font-semibold text-gray-500 dark:text-gray-400 border-b-2 border-dashed border-gray-400 dark:border-gray-500 pb-1 px-4"
+                    >
+                        የአባል ፊርማ (Member Signature): ___________________________
+                    </div>
+                </div>
             </div>
         </div>
 
